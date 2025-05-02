@@ -13,8 +13,22 @@
 ;;  - Implements a seamless integration between on-chain assets and off-chain gameplay
 ;;  - Ensures compliance with BTC/Stacks ecosystem standards
 
-;; Implement the NFT trait
-(impl-trait .nft-trait.nft-trait)
+;; Define the NFT trait directly in this contract
+(define-trait nft-trait
+  (
+    ;; Last token ID, limited to uint range
+    (get-last-token-id () (response uint uint))
+    
+    ;; URI for token metadata
+    (get-token-uri (uint) (response (optional (string-ascii 256)) uint))
+    
+    ;; Owner of the specified token
+    (get-owner (uint) (response (optional principal) uint))
+    
+    ;; Transfer from owner to recipient
+    (transfer (uint principal principal) (response bool uint))
+  )
+)
 
 ;; Constants & Error Codes
 
