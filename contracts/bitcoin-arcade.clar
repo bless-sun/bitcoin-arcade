@@ -88,3 +88,80 @@
     (<= (len game-type) u50)
   )
 )
+
+;; Validate principal (simple check to ensure it's not a zero-like principal)
+(define-private (is-valid-principal (addr principal))
+  (not (is-eq addr tx-sender))
+)
+
+;; Check if a principal is the owner of a specific NFT
+(define-private (is-owner 
+  (token-id uint)
+  (user principal)
+)
+  (match (nft-get-owner? game-asset token-id)
+    owner (is-eq user owner)
+    false)
+)
+
+;; Initialize contract
+(define-private (initialize)
+  (begin
+    ;; Set initial reward per point
+    (var-set reward-per-point u10)
+    
+    ;; Set initial reward pool
+    (var-set total-reward-pool u1000000)  ;; 1 million sats initial pool
+    
+    true
+  )
+)
+
+;; NFT Core Functions
+
+;; Mint a new game NFT
+(define-public (mint-game-nft 
+  (name (string-ascii 50))
+  (description (string-ascii 200))
+  (rarity (string-ascii 9))
+  (game-type (string-ascii 50))
+)
+  (let 
+    (
+      (token-id (+ (var-get last-token-id) u1))
+    )
+    ;; Ensure only contract owner can mint initially
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    
+    ;; Validate input parameters
+    (asserts! (and 
+      (> (len name) u0)
+      (<= (len name) u50)
+      (> (len description) u0)
+      (<= (len description) u200)
+      (is-valid-rarity rarity)
+      (is-valid-game-type game-type)
+    ) ERR-INVALID-PARAMETERS)
+    
+    ;; Mint the NFT
+    (try! (nft-mint? game-asset token-id tx-sender))
+    
+    ;; Store metadata
+    (map-set nft-metadata 
+      {token-id: token-id}
+      {
+        name: name,
+        description: description,
+        rarity: rarity,
+        game-type: game-type,
+        minted-at: block-height
+      }
+    )
+    
+    ;; Update last token ID
+    (var-set last-token-id token-id)
+    
+    ;; Return the new token ID
+    (ok token-id)
+  )
+)
