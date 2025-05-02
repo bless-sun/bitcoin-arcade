@@ -154,7 +154,7 @@
         description: description,
         rarity: rarity,
         game-type: game-type,
-        minted-at: block-height
+        minted-at: stacks-block-height
       }
     )
     
@@ -252,7 +252,7 @@
       {player: player}
       {
         total-score: new-total-score,
-        last-updated: block-height,
+        last-updated: stacks-block-height,
         total-rewards-earned: (+ 
           (get total-rewards-earned current-score) 
           (* score (var-get reward-per-point))
@@ -263,3 +263,85 @@
     (ok new-total-score)
   )
 )
+
+;; Distribute Bitcoin rewards
+(define-public (distribute-bitcoin-rewards 
+  (player principal)
+)
+  (let 
+    (
+      (player-score 
+        (unwrap! 
+          (map-get? player-scores {player: player}) 
+          ERR-NFT-NOT-FOUND
+        )
+      )
+      (total-reward (get total-rewards-earned player-score))
+    )
+    ;; Ensure only contract owner can distribute
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    
+    ;; Ensure sufficient reward pool and valid reward amount
+    (asserts! (and 
+      (>= (var-get total-reward-pool) total-reward)
+      (> total-reward u0)
+    ) ERR-INSUFFICIENT-FUNDS)
+    
+    ;; Simulate Bitcoin reward transfer 
+    ;; Note: Actual BTC transfer would require additional implementation
+    (var-set total-reward-pool (- (var-get total-reward-pool) total-reward))
+    
+    ;; Reset player rewards after distribution
+    (map-set player-scores 
+      {player: player}
+      {
+        total-score: (get total-score player-score),
+        last-updated: stacks-block-height,
+        total-rewards-earned: u0
+      }
+    )
+    
+    (ok total-reward)
+  )
+)
+
+;; Add funds to reward pool
+(define-public (add-to-reward-pool (amount uint))
+  (begin
+    ;; Ensure only contract owner can add to pool
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    
+    ;; Validate reward pool addition
+    (asserts! (and 
+      (> amount u0) 
+      (<= amount u1000000000)  ;; Prevent extremely large additions
+    ) ERR-INVALID-PARAMETERS)
+    
+    ;; Update reward pool
+    (var-set total-reward-pool (+ (var-get total-reward-pool) amount))
+    (ok true)
+  )
+)
+
+;; Administrative Functions
+
+;; Transfer contract ownership
+(define-public (transfer-ownership (new-owner principal))
+  (begin
+    ;; Ensure only current owner can transfer
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    
+    ;; Prevent transfer to zero or current owner principal
+    (asserts! (and 
+      (not (is-eq new-owner tx-sender))
+      (is-valid-principal new-owner)
+    ) ERR-INVALID-PARAMETERS)
+    
+    ;; Update contract owner
+    (var-set contract-owner new-owner)
+    (ok true)
+  )
+)
+
+;; Run initialization on contract deploy
+(initialize)
