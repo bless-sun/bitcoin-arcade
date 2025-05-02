@@ -165,3 +165,101 @@
     (ok token-id)
   )
 )
+
+;; Transfer an NFT to another owner
+(define-public (transfer 
+  (token-id uint)
+  (sender principal)
+  (recipient principal)
+)
+  (begin
+    ;; Validate recipient
+    (asserts! (and 
+      (not (is-eq sender recipient)) 
+      (not (is-eq recipient (var-get contract-owner)))
+      (is-valid-principal recipient)
+    ) ERR-INVALID-PARAMETERS)
+    
+    ;; Ensure sender is the owner
+    (asserts! (is-owner token-id sender) ERR-NOT-AUTHORIZED)
+    
+    ;; Perform transfer
+    (try! (nft-transfer? game-asset token-id sender recipient))
+    (ok true)
+  )
+)
+
+;; Read-Only Functions 
+
+;; Get NFT metadata
+(define-read-only (get-nft-metadata (token-id uint))
+  (map-get? nft-metadata {token-id: token-id})
+)
+
+;; Get current reward pool balance
+(define-read-only (get-reward-pool-balance)
+  (var-get total-reward-pool)
+)
+
+;; Implement NFT trait requirements
+(define-read-only (get-last-token-id)
+  (ok (var-get last-token-id))
+)
+
+(define-read-only (get-token-uri (token-id uint))
+  (ok 
+    (some 
+      (concat 
+        "https://bitcoinarcade.io/assets/" 
+        (int-to-ascii token-id)
+      )
+    )
+  )
+)
+
+(define-read-only (get-owner (token-id uint))
+  (ok (nft-get-owner? game-asset token-id))
+)
+
+;; Game Reward System Functions
+
+;; Record player score
+(define-public (record-player-score 
+  (player principal)
+  (score uint)
+)
+  (let 
+    (
+      (current-score 
+        (default-to 
+          {total-score: u0, last-updated: u0, total-rewards-earned: u0}
+          (map-get? player-scores {player: player})
+        )
+      )
+      (new-total-score (+ (get total-score current-score) score))
+    )
+    ;; Ensure only contract owner can call this
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    
+    ;; Validate score
+    (asserts! (and 
+      (> score u0) 
+      (<= score u10000)  ;; Reasonable score limit
+    ) ERR-INVALID-PARAMETERS)
+    
+    ;; Update player scores
+    (map-set player-scores 
+      {player: player}
+      {
+        total-score: new-total-score,
+        last-updated: block-height,
+        total-rewards-earned: (+ 
+          (get total-rewards-earned current-score) 
+          (* score (var-get reward-per-point))
+        )
+      }
+    )
+    
+    (ok new-total-score)
+  )
+)
